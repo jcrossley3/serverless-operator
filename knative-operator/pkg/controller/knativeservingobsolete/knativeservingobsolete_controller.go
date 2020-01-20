@@ -3,7 +3,7 @@ package knativeservingobsolete
 import (
 	"context"
 
-	"github.com/openshift-knative/serverless-operator/knative-operator/pkg/common"
+	commonserving "github.com/openshift-knative/serverless-operator/knative-operator/pkg/common/serving"
 	obsolete "github.com/openshift-knative/serverless-operator/serving/operator/pkg/apis/serving/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,7 +94,7 @@ func (r *ReconcileKnativeServingObsolete) Reconcile(request reconcile.Request) (
 		},
 	}
 	latest.Spec.Config = current.Spec.Config
-	if err := common.Mutate(latest, r.client); err != nil {
+	if err := commonserving.Mutate(latest, r.client); err != nil {
 		return reconcile.Result{}, err
 	}
 	// Orphan the kids to avoid webhook race condition
