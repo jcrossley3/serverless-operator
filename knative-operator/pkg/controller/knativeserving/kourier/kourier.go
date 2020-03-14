@@ -124,3 +124,17 @@ func replaceImageFromEnvironment(prefix string, scheme *runtime.Scheme) mf.Trans
 		return nil
 	}
 }
+
+// Resources returns unstructured resources from Kourier manifest.
+func Resources(namespace string, apiclient client.Client) ([]unstructured.Unstructured, error) {
+	manifest, err := mfc.NewManifest(path, apiclient)
+	if err != nil {
+		return nil, err
+	}
+	transforms := []mf.Transformer{mf.InjectNamespace(namespace)}
+	manifest, err = manifest.Transform(transforms...)
+	if err != nil {
+		return nil, err
+	}
+	return manifest.Resources(), nil
+}

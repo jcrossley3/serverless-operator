@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	servingv1alpha1 "knative.dev/serving-operator/pkg/apis/serving/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +23,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+const (
+	// TODO: The namespace should be editable.
+	ingressNamespace        = "knative-serving-ingress"
+	knativeServingName      = "knative-serving"
+	knativeServingNamespace = "knative-serving"
 )
 
 var log = common.Log.WithName("controller")
@@ -49,6 +57,44 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &servingv1alpha1.KnativeServing{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
 	if err != nil {
 		return err
+	}
+
+	resources, err := kourier.Resources(ingressNamespace, mgr.GetClient())
+	if err != nil {
+		return err
+	}
+
+	// Watch for Kourier resources.
+	gvkToKourier := map[schema.GroupVersionKind][]types.NamespacedName{}
+	for _, u := range resources {
+		gvkToKourier[u.GroupVersionKind()] =
+			append(gvkToKourier[u.GroupVersionKind()], types.NamespacedName{Namespace: u.GetNamespace(), Name: u.GetName()})
+	}
+
+	for _, u := range resources {
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   u.GroupVersionKind().Group,
+			Kind:    u.GroupVersionKind().Kind,
+			Version: u.GroupVersionKind().Version,
+		})
+		err = c.Watch(&source.Kind{Type: &u}, &handler.EnqueueRequestsFromMapFunc{
+			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
+				namespacedNames := gvkToKourier[obj.Object.GetObjectKind().GroupVersionKind()]
+				for _, namespacedName := range namespacedNames {
+					if namespacedName.Name == obj.Meta.GetName() && namespacedName.Namespace == obj.Meta.GetNamespace() {
+						return []reconcile.Request{{
+							NamespacedName: types.NamespacedName{
+								Namespace: knativeServingNamespace,
+								Name:      knativeServingName,
+							},
+						}}
+					}
+				}
+				return nil
+			})})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
