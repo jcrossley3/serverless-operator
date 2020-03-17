@@ -72,11 +72,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	for _, u := range resources {
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   u.GroupVersionKind().Group,
-			Kind:    u.GroupVersionKind().Kind,
-			Version: u.GroupVersionKind().Version,
-		})
 		err = c.Watch(&source.Kind{Type: &u}, &handler.EnqueueRequestsFromMapFunc{
 			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
 				namespacedNames := gvkToKourier[obj.Object.GetObjectKind().GroupVersionKind()]
