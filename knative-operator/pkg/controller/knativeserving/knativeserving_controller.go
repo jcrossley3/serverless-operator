@@ -25,12 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	// TODO: The namespace should be editable.
-	ingressNamespace        = "knative-serving-ingress"
-	knativeServingName      = "knative-serving"
-	knativeServingNamespace = "knative-serving"
-)
+// TODO: The namespace should be editable.
+const ingressNamespace = "knative-serving-ingress"
 
 var log = common.Log.WithName("controller")
 
@@ -59,12 +55,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	resources, err := kourier.Resources(ingressNamespace, mgr.GetClient())
+	// Watch for Kourier resources.
+	manifest, err := kourier.Manifest(ingressNamespace, mgr.GetClient())
 	if err != nil {
 		return err
 	}
+	resources := manifest.Resources()
 
-	// Watch for Kourier resources.
 	gvkToKourier := map[schema.GroupVersionKind][]types.NamespacedName{}
 	for _, u := range resources {
 		gvkToKourier[u.GroupVersionKind()] =
@@ -76,13 +73,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
 				namespacedNames := gvkToKourier[obj.Object.GetObjectKind().GroupVersionKind()]
 				for _, namespacedName := range namespacedNames {
+					ks, err := common.KnativeServing(mgr.GetClient(), common.NamespaceFromIngressNamespace(ingressNamespace))
+					if err != nil {
+						log.Error(err, "Failed to get KnativeSErving")
+						continue
+					}
 					if namespacedName.Name == obj.Meta.GetName() && namespacedName.Namespace == obj.Meta.GetNamespace() {
-						return []reconcile.Request{{
-							NamespacedName: types.NamespacedName{
-								Namespace: knativeServingNamespace,
-								Name:      knativeServingName,
-							},
-						}}
+						return []reconcile.Request{{NamespacedName: ks}}
 					}
 				}
 				return nil

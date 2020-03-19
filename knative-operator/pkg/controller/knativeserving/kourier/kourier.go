@@ -24,11 +24,11 @@ var (
 
 // Apply applies Kourier resources.
 func Apply(instance *servingv1alpha1.KnativeServing, api client.Client, scheme *runtime.Scheme) error {
-	manifest, err := mfc.NewManifest(path, api)
+	manifest, err := Manifest(common.IngressNamespace(instance.GetNamespace()), api)
 	if err != nil {
-		return fmt.Errorf("failed to read kourier manifest: %w", err)
+		return fmt.Errorf("failed to load kourier manifest: %w", err)
 	}
-	transforms := []mf.Transformer{mf.InjectNamespace(common.IngressNamespace(instance.GetNamespace())), replaceImageFromEnvironment("IMAGE_", scheme)}
+	transforms := []mf.Transformer{replaceImageFromEnvironment("IMAGE_", scheme)}
 	manifest, err = manifest.Transform(transforms...)
 	if err != nil {
 		return fmt.Errorf("failed to transform kourier manifest: %w", err)
@@ -68,16 +68,11 @@ func checkDeployments(manifest *mf.Manifest, instance *servingv1alpha1.KnativeSe
 // Delete deletes Kourier resources.
 func Delete(instance *servingv1alpha1.KnativeServing, api client.Client) error {
 	log.Info("Deleting Kourier Ingress")
-	manifest, err := mfc.NewManifest(path, api)
+	manifest, err := Manifest(common.IngressNamespace(instance.GetNamespace()), api)
 	if err != nil {
-		return fmt.Errorf("failed to read kourier manifest: %w", err)
+		return fmt.Errorf("failed to load kourier manifest: %w", err)
 	}
-	transforms := []mf.Transformer{mf.InjectNamespace(common.IngressNamespace(instance.GetNamespace()))}
 
-	manifest, err = manifest.Transform(transforms...)
-	if err != nil {
-		return fmt.Errorf("failed to transform kourier manifest: %w", err)
-	}
 	if err := manifest.Delete(); err != nil {
 		return fmt.Errorf("failed to delete kourier manifest: %w", err)
 	}
@@ -125,16 +120,12 @@ func replaceImageFromEnvironment(prefix string, scheme *runtime.Scheme) mf.Trans
 	}
 }
 
-// Resources returns unstructured resources from Kourier manifest.
-func Resources(namespace string, apiclient client.Client) ([]unstructured.Unstructured, error) {
+// Manifest returns kourier manifest after transformed
+func Manifest(namespace string, apiclient client.Client) (mf.Manifest, error) {
 	manifest, err := mfc.NewManifest(path, apiclient)
 	if err != nil {
-		return nil, err
+		return mf.Manifest{}, err
 	}
 	transforms := []mf.Transformer{mf.InjectNamespace(namespace)}
-	manifest, err = manifest.Transform(transforms...)
-	if err != nil {
-		return nil, err
-	}
-	return manifest.Resources(), nil
+	return manifest.Transform(transforms...)
 }
