@@ -73,12 +73,12 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
 				namespacedNames := gvkToKourier[obj.Object.GetObjectKind().GroupVersionKind()]
 				for _, namespacedName := range namespacedNames {
-					ks, err := common.KnativeServing(mgr.GetClient(), common.NamespaceFromIngressNamespace(ingressNamespace))
-					if err != nil {
-						log.Error(err, "Failed to get KnativeSErving")
-						continue
-					}
 					if namespacedName.Name == obj.Meta.GetName() && namespacedName.Namespace == obj.Meta.GetNamespace() {
+						ks, err := common.KnativeServing(mgr.GetClient(), common.NamespaceFromIngressNamespace(ingressNamespace))
+						if err != nil {
+							log.Error(err, "Failed to get KnativeSErving")
+							continue
+						}
 						return []reconcile.Request{{NamespacedName: ks}}
 					}
 				}
