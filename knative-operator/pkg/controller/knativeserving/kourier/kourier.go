@@ -28,14 +28,17 @@ func Apply(instance *servingv1alpha1.KnativeServing, api client.Client, scheme *
 	if err != nil {
 		return fmt.Errorf("failed to load kourier manifest: %w", err)
 	}
-	transforms := []mf.Transformer{replaceImageFromEnvironment("IMAGE_", scheme)}
+	transforms := []mf.Transformer{replaceImageFromEnvironment("IMAGE_", scheme), fixClusterIP(manifest.Client, scheme)}
 	manifest, err = manifest.Transform(transforms...)
 	if err != nil {
 		return fmt.Errorf("failed to transform kourier manifest: %w", err)
 	}
 	log.Info("Installing Kourier Ingress")
 	if err := manifest.Apply(); err != nil {
-		return fmt.Errorf("failed to apply kourier manifest: %w", err)
+		log.Error(err, "Apply failed, trying overwrite")
+		if err = manifest.Apply(mf.ForceReplace); err != nil {
+			return fmt.Errorf("failed to apply kourier manifest: %w", err)
+		}
 	}
 	if err := checkDeployments(&manifest, instance, api); err != nil {
 		instance.Status.MarkDependencyInstalling("Kourier")
@@ -122,10 +125,32 @@ func replaceImageFromEnvironment(prefix string, scheme *runtime.Scheme) mf.Trans
 
 // Manifest returns kourier manifest after transformed
 func Manifest(namespace string, apiclient client.Client) (mf.Manifest, error) {
-	manifest, err := mfc.NewManifest(path, apiclient)
+	manifest, err := mfc.NewManifest(path, apiclient, mf.UseLogger(log))
 	if err != nil {
 		return mf.Manifest{}, err
 	}
 	transforms := []mf.Transformer{mf.InjectNamespace(namespace)}
 	return manifest.Transform(transforms...)
+}
+
+func fixClusterIP(c mf.Client, scheme *runtime.Scheme) mf.Transformer {
+	return func(u *unstructured.Unstructured) error {
+		if u.GetKind() == "Service" {
+			if current, _ := c.Get(u); current != nil {
+				ours := &v1.Service{}
+				if err := scheme.Convert(u, ours, nil); err != nil {
+					return err
+				}
+				theirs := &v1.Service{}
+				if err := scheme.Convert(current, theirs, nil); err != nil {
+					return err
+				}
+				ours.SetResourceVersion(theirs.GetResourceVersion())
+				ours.SetCreationTimestamp(theirs.GetCreationTimestamp())
+				ours.Spec.ClusterIP = theirs.Spec.ClusterIP
+				return scheme.Convert(ours, u, nil)
+			}
+		}
+		return nil
+	}
 }
